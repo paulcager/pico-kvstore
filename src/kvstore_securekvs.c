@@ -122,26 +122,39 @@ static int gcm_init_and_starts(kvs_securekvs_context_t *ctx, mbedtls_gcm_context
     if (ret != 0) {
         return ret;
     }
-    ret = mbedtls_gcm_starts(gcm_ctx, encrypt, iv, iv_len, aad, aad_len);
+    // mbedtls 3.x API: mbedtls_gcm_starts takes mode and iv only
+    ret = mbedtls_gcm_starts(gcm_ctx, encrypt, iv, iv_len);
     if (ret != 0) {
         return ret;
+    }
+    // In mbedtls 3.x, AAD is provided via update_ad
+    if (aad_len > 0) {
+        ret = mbedtls_gcm_update_ad(gcm_ctx, aad, aad_len);
+        if (ret != 0) {
+            return ret;
+        }
     }
     return ret;
 }
 
 static int gcm_update_chunk(mbedtls_gcm_context *gcm_ctx, const uint8_t *input, uint8_t *output,
                             size_t length) {
-    return mbedtls_gcm_update(gcm_ctx, length, input, output);
+    // mbedtls 3.x API: mbedtls_gcm_update takes input/output before length
+    size_t olen;
+    return mbedtls_gcm_update(gcm_ctx, input, length, output, length, &olen);
 }
 
 static int gcm_finish_and_tag(mbedtls_gcm_context *gcm_ctx, uint8_t *tag, size_t tag_len) {
-    return mbedtls_gcm_finish(gcm_ctx, tag, tag_len);
+    // mbedtls 3.x API: mbedtls_gcm_finish(ctx, output, output_size, output_length, tag, tag_len)
+    size_t olen = 0;
+    return mbedtls_gcm_finish(gcm_ctx, NULL, 0, &olen, tag, tag_len);
 }
 
 static int gcm_finish_and_check_tag(mbedtls_gcm_context *gcm_ctx, const uint8_t *tag,
                                     size_t tag_len) {
     uint8_t calc_tag[GCM_TAG_SIZE];
-    int ret = mbedtls_gcm_finish(gcm_ctx, calc_tag, tag_len);
+    size_t olen = 0;
+    int ret = mbedtls_gcm_finish(gcm_ctx, NULL, 0, &olen, calc_tag, tag_len);
     if (ret != 0) {
         return ret;
     }
